@@ -89,8 +89,8 @@ async def votekick(interaction: discord.Interaction, member: discord.Member):
         print(f"Error creating poll: {e}")
         return
 
-    # Wait for the poll to end (1 minute + a small buffer).
-    await asyncio.sleep(60)
+    # Wait for the poll to end after 30 seconds..
+    await asyncio.sleep(30)
     await poll.end()
     print(f"Poll ({poll_message.id}) ended.")
 
