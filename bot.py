@@ -8,7 +8,7 @@ from datetime import timedelta
 # Define the necessary intents for the bot.
 # Guilds and members intents are required to access member information.
 load_dotenv()  # Load environment variables from a .env file
-TOKEN = os.getenv('DISCORD_TOKEN')  # Get the bot token from environment variables
+TOKEN = os.getenv('DISCORD_TOKEN')
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
@@ -33,6 +33,8 @@ async def on_ready():
     except Exception as e:
         print(f"Failed to sync commands: {e}")
 
+    print("-" * 30)
+
 @bot.tree.command(name="votekick", description="Starts a poll to timeout a user for 30 seconds.")
 @discord.app_commands.describe(member="The member to vote kick.")
 async def votekick(interaction: discord.Interaction, member: discord.Member):
@@ -50,13 +52,17 @@ async def votekick(interaction: discord.Interaction, member: discord.Member):
     if member == bot.user:
         await interaction.response.send_message("You cannot kick me.", ephemeral=True)
         return
+    
+    # Prevent a user from trying to start a votekick against someone who is already timed out.
+    if member.is_timed_out():
+        await interaction.response.send_message(f"{member.display_name} is already timed out.", ephemeral=True)
+        return
 
     # Check if the bot has permissions to timeout members.
     if not interaction.guild.me.guild_permissions.moderate_members:
         await interaction.response.send_message("I don't have the `Moderate Members` permission to time out users.", ephemeral=True)
         return
         
-
     # Create the poll question and options.
     poll_question = f"Votekick {member.display_name}"
 
@@ -74,7 +80,7 @@ async def votekick(interaction: discord.Interaction, member: discord.Member):
         poll.add_answer(text="No", emoji="❌")
 
         poll_message = await interaction.followup.send(
-            content=f"**Poll: {poll_question}**\n*This poll will end in 1 minute.*",
+            content=f"**Poll: {poll_question}**\n*This poll will end in 30 seconds.*",
             poll=poll,
         )
         print(f"Poll created with ID: {poll_message.id}")
@@ -84,37 +90,45 @@ async def votekick(interaction: discord.Interaction, member: discord.Member):
         return
 
     # Wait for the poll to end (1 minute + a small buffer).
-    await asyncio.sleep(5)
+    await asyncio.sleep(60)
     await poll.end()
-
-    while not poll.is_finalized:
-        await asyncio.sleep(1)
-    
-    print("Poll ended.")
+    print(f"Poll ({poll_message.id}) ended.")
 
     # Fetch the message again to get the final poll results.
-    try:
-        poll_results = poll.get_answer(poll_message.id)
-    except discord.NotFound:
-        await interaction.followup.send("Could not find the original poll message.", ephemeral=True)
-        print("Poll message not found.")
-        return
+    for options in poll.answers:
+        yes_votes = 0
+        if options.text == "Yes":
+            yes_votes = options.vote_count
+            break
     
-    if poll_results:
-        # Check if the "Yes" votes are more than 50% of the total votes.
-        if poll_results.text == "Yes":
-            try:
-                # Timeout the member for 30 seconds.
-                await member.timeout(timedelta(seconds=30), reason="Votekick passed.")
-                await interaction.followup.send(f"The votekick for {member.mention} passed.")
-                print(f"Timed out {member.display_name} for 30 seconds.")
-            except discord.Forbidden:
-                await interaction.followup.send(f"I don't have the necessary permissions to time out {member.mention}.")
-            except Exception as e:
-                print(f"An error occurred while trying to time out the user: {e}")
-        else:
-            await interaction.followup.send(f"The votekick for {member.mention} has failed.")
+    # Check if the votekick has been passed
+    if poll.total_votes == 0 or poll.total_votes < 2:
+        await interaction.followup.send(f"The votekick for {member.mention} has failed, not enough votes.")
+        won = False
+        return
     else:
-        print("Could not retrieve poll results.")
+        won = (yes_votes / poll.total_votes) > 0.5
+    
+    # If the votekick passed, timeout the member for 30 seconds.
+    if won:
+        try:
+            # Timeout the member for 30 seconds.
+            await member.timeout(timedelta(seconds=30), reason="Votekick passed.")
+            await interaction.followup.send(f"The votekick for {member.mention} passed.")
+            print(f"{member.display_name} has been timeouted for 30 seconds.")
+            
+            # notify the user that their timeout has ended after 30 seconds.
+            await interaction.followup.send(f"{member.display_name}, your timeout has ended. You can now rejoin the conversation.")
+            await asyncio.sleep(30)  
+            print(f"{member.display_name}'s timeout has ended.")
+        except discord.Forbidden:
+            await interaction.followup.send(f"I don't have the necessary permissions to time out {member.mention}.")
+        except Exception as e:
+            print(f"An error occurred while trying to time out the user: {e}")
+    else:
+        await interaction.followup.send(f"The votekick for {member.mention} has failed.")
+        print(f"The votekick for {member.display_name} has failed.")
+
+    
 
 bot.run(TOKEN)
