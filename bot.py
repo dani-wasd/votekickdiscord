@@ -111,7 +111,7 @@ async def votekick(interaction: discord.Interaction, member: discord.Member):
             break
     
     # Check if the poll has enough votes to determine a result.
-    if poll.total_votes == 0 or poll.total_votes < 1:
+    if poll.total_votes == 0 or poll.total_votes < 2:
         await interaction.followup.send(f"The votekick for {member.mention} failed (not enough votes)")
         print(f"Conclusion: Failed; User: {member.display_name}; Reason: not enough total votes")
         won = False
@@ -128,7 +128,7 @@ async def votekick(interaction: discord.Interaction, member: discord.Member):
             print(f"Conclusion: Passed; User: {member.display_name}")
             
             # log when the timeout ends
-            await asyncio.sleep(TIMEOUT_DURATION)
+            await asyncio.sleep(TIMEOUT_DURATION.total_seconds())
             if not member.is_timed_out():
                 print(f"{member.display_name}'s timeout has ended.")
                 
