@@ -64,6 +64,7 @@ async def votekick(interaction: discord.Interaction, member: discord.Member):
     # Check if the member has a higher role than the bot
     if member.top_role >= interaction.guild.me.top_role:
         await interaction.response.send_message(f"I don't have the necessary permissions to timeout {member.mention}.", ephemeral=True)
+        return
 
     # Prevent a user from trying to start a votekick against someone who is already timed out.
     if member.is_timed_out():
